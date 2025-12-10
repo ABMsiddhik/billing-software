@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './App.css';
@@ -22,7 +22,7 @@ import {
   FaMapMarkerAlt,
   FaStore,
   FaTrash,
-  FaSync  // ADD THIS IMPORT
+  FaSync
 } from 'react-icons/fa';
 
 const App = () => {
@@ -60,59 +60,225 @@ const App = () => {
   const [invoice, setInvoice] = useState(loadInitialInvoice);
   const [products, setProducts] = useState([]); // Dynamic products from Google Sheets
   const [loadingProducts, setLoadingProducts] = useState(true);
-
+  const [productsCacheKey, setProductsCacheKey] = useState(Date.now());
 
   const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQjOvqKnTVpO0wrrFqpihWTrYVLPCa_g44vl9S9Urh8-RHukPRjhBd_sz6ZqSW73xPXJQPwG5WpsL0W/pub?output=csv';
 
-  // Function to fetch products from Google Sheets
-  const fetchProductsFromGoogleSheets = async () => {
-    try {
-      setLoadingProducts(true);
-      const response = await fetch(GOOGLE_SHEETS_URL);
+  // Function to fetch products from Google Sheets with cache busting
+ const fetchProductsFromGoogleSheets = useCallback(async (forceRefresh = false) => {
+  try {
+    setLoadingProducts(true);
+    
+    console.log('=== DEBUG: Starting fetch ===');
+    console.log('Force refresh:', forceRefresh);
+    console.log('Cache key:', productsCacheKey);
+    
+    // Clear old caches if forcing refresh
+    if (forceRefresh) {
+      localStorage.removeItem('freshfruits_products_cache');
+      sessionStorage.removeItem('freshfruits_products');
+      console.log('=== DEBUG: Cleared all caches ===');
+    }
+      // Check session storage first (short-term cache, 2 minutes)
+      const sessionCached = sessionStorage.getItem('freshfruits_products');
+      if (sessionCached && !forceRefresh) {
+        const cacheData = JSON.parse(sessionCached);
+        // Use cache if not expired (less than 2 minutes old)
+        if (cacheData.timestamp && cacheData.expiresAt > Date.now()) {
+          setProducts(cacheData.products);
+          setLoadingProducts(false);
+          return;
+        }
+      }
+      
+      // Check localStorage cache (longer-term, 10 minutes)
+      const localCached = localStorage.getItem('freshfruits_products_cache');
+      if (localCached && !forceRefresh) {
+        const cacheData = JSON.parse(localCached);
+        if (cacheData.timestamp && cacheData.expiresAt > Date.now()) {
+          setProducts(cacheData.products);
+          setLoadingProducts(false);
+          
+          // Also update session cache
+          sessionStorage.setItem('freshfruits_products', JSON.stringify(cacheData));
+          return;
+        }
+      }
+      
+// Fetch fresh data with cache busting
+const timestamp = Date.now();
+setProductsCacheKey(timestamp);
+
+// Use cache busting parameter with &
+const url = `${GOOGLE_SHEETS_URL}&_=${timestamp}`;
+console.log('=== DEBUG: Fetching URL:', url);
+
+const response = await fetch(url, {
+  cache: 'no-cache'  // Simpler option
+});
       const csvText = await response.text();
       
       Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          // Transform CSV data to match our product structure
-          const formattedProducts = results.data.map((row, index) => ({
-            id: parseInt(row.ID) || index + 1,
-            name: row.Name || row.name || '',
-            price: parseFloat(row.Price || row.price || 0),
-            category: row.Category || row.category || 'General'
-          }));
-          setProducts(formattedProducts);
-          setLoadingProducts(false);
-          toast.success('Products loaded from Google Sheets!');
+  header: true,
+  skipEmptyLines: true,
+  complete: (results) => {
+    // Log raw data for debugging
+    console.log('Raw CSV results:', results.data);
+    
+    // Filter out empty or invalid rows - handle different header formats
+    const formattedProducts = results.data
+      .filter(row => {
+        // Check for different possible header names
+        const name = row.Name || row.name || row['Name'] || '';
+        const price = row.Price || row.price || row['Price'] || 0;
+        return name && name.trim() !== '' && price && !isNaN(parseFloat(price));
+      })
+      .map((row, index) => {
+        // Handle different header name variations
+        const name = row.Name || row.name || row['Name'] || '';
+        const price = row.Price || row.price || row['Price'] || 0;
+        const category = row.Category || row.category || row['Category'] || 'General';
+        
+        return {
+          id: parseInt(row.ID) || index + 1,
+          name: name.toString().trim(),
+          price: parseFloat(price) || 0,
+          category: category.toString().trim()
+        };
+      })
+      .filter(product => product.name && !isNaN(product.price) && product.price > 0);
+    
+    // Debug log
+    console.log('Formatted products:', formattedProducts);
+    
+    // Save to caches with expiration
+// Save to caches with SHORT expiration (for testing)
+const cacheData = {
+  products: formattedProducts,
+  timestamp: Date.now(),
+  expiresAt: Date.now() + (1 * 60 * 1000) // 1 minute for localStorage
+};
+
+const sessionCacheData = {
+  products: formattedProducts,
+  timestamp: Date.now(),
+  expiresAt: Date.now() + (30 * 1000) // 30 seconds for sessionStorage
+};
+    
+    localStorage.setItem('freshfruits_products_cache', JSON.stringify(cacheData));
+    sessionStorage.setItem('freshfruits_products', JSON.stringify(sessionCacheData));
+    
+    setProducts(formattedProducts);
+    setLoadingProducts(false);
+    
+    if (forceRefresh) {
+      toast.success(`Refreshed! Loaded ${formattedProducts.length} products`);
+    } else {
+      toast.success(`Loaded ${formattedProducts.length} products from Google Sheets`);
+    }
+  
         },
         error: (error) => {
           console.error('Error parsing CSV:', error);
           setLoadingProducts(false);
-          toast.error('Failed to load products');
+          
+          // Try to use cached data as fallback
+          const cached = localStorage.getItem('freshfruits_products_cache') || 
+                        sessionStorage.getItem('freshfruits_products');
+          if (cached) {
+            try {
+              const cacheData = JSON.parse(cached);
+              setProducts(cacheData.products || []);
+              toast.warning('Using cached products (network error)');
+            } catch (e) {
+              setProducts([]);
+              toast.error('Failed to load products');
+            }
+          } else {
+            setProducts([]);
+            toast.error('Failed to load products');
+          }
         }
       });
     } catch (error) {
       console.error('Error fetching products:', error);
       setLoadingProducts(false);
-      toast.error('Network error loading products');
+      
+      // Try to use cached data as fallback
+      const cached = localStorage.getItem('freshfruits_products_cache') || 
+                    sessionStorage.getItem('freshfruits_products');
+      if (cached) {
+        try {
+          const cacheData = JSON.parse(cached);
+          setProducts(cacheData.products || []);
+          toast.warning('Using cached products (network error)');
+        } catch (e) {
+          setProducts([]);
+          toast.error('Network error loading products');
+        }
+      } else {
+        setProducts([]);
+        toast.error('Network error loading products');
+      }
     }
-  };
-
-  // Load products on component mount
-  useEffect(() => {
-    fetchProductsFromGoogleSheets();
-    
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchProductsFromGoogleSheets, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  // Add a refresh button function
-  const handleRefreshProducts = () => {
+  // Load products on component mount with cache strategy
+  useEffect(() => {
     fetchProductsFromGoogleSheets();
-    toast.info('Refreshing products from Google Sheets...');
-  };
+  }, [fetchProductsFromGoogleSheets]);
+
+  // Add a refresh button function with debouncing
+  const handleRefreshProducts = useCallback(() => {
+  if (loadingProducts) {
+    toast.info('Already refreshing...');
+    return;
+  }
+  
+  toast.info('Force refreshing from Google Sheets...', {
+    autoClose: 1500,
+    position: "top-right"
+  });
+  
+  // Force clear all caches first
+  localStorage.removeItem('freshfruits_products_cache');
+  sessionStorage.removeItem('freshfruits_products');
+  
+  // Update cache key to force re-render
+  const newCacheKey = Date.now();
+  setProductsCacheKey(newCacheKey);
+  
+  // Clear products state briefly to show loading
+  setProducts([]);
+  
+  // Force refresh with new cache busting
+  fetchProductsFromGoogleSheets(true);
+}, [fetchProductsFromGoogleSheets, loadingProducts]);
+// Clear all caches completely with browser cache clearing
+const handleClearAllCaches = () => {
+  // Clear all caches
+  localStorage.removeItem('freshfruits_products_cache');
+  sessionStorage.removeItem('freshfruits_products');
+  
+  // Clear fetch cache by modifying URL
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(7);
+  
+  // Force update cache key
+  setProductsCacheKey(timestamp);
+  
+  // Clear products state
+  setProducts([]);
+  
+  // Show immediate feedback
+  toast.info('Clearing browser cache...', { autoClose: 1000 });
+  
+  // Force refresh with new cache busting parameters
+  setTimeout(() => {
+    fetchProductsFromGoogleSheets(true);
+    toast.success('Cache cleared! Refreshing...');
+  }, 100);
+};
 
   // Save to localStorage whenever invoice changes
   useEffect(() => {
@@ -189,7 +355,7 @@ const App = () => {
 
   // Clear All Data
   const clearAll = () => {
-    if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+    if (window.confirm('Are you sure you want to clear all data? This will reset the invoice but keep products. This cannot be undone.')) {
       const freshInvoice = {
         invoiceNumber: generateUniqueInvoiceNumber(),
         date: new Date().toISOString().split('T')[0],
@@ -210,6 +376,7 @@ const App = () => {
       };
       setInvoice(freshInvoice);
       localStorage.removeItem('freshfruits_invoice');
+      toast.success('Invoice cleared!');
     }
   };
 
@@ -327,6 +494,9 @@ const App = () => {
                     FreshFruits Billing
                   </h1>
                   <p className="text-xs sm:text-sm md:text-base text-gray-600">Invoice Generator (Live from Google Sheets)</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Products Cache Key: <span className="font-mono">{productsCacheKey.toString().slice(-6)}</span>
+                  </p>
                 </div>
               </div>
 
@@ -354,7 +524,7 @@ const App = () => {
                   className="flex items-center space-x-1 sm:space-x-2 bg-red-600 text-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm md:text-base"
                 >
                   <FaTrash className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="hidden sm:inline">Clear All</span>
+                  <span className="hidden sm:inline">Clear Invoice</span>
                   <span className="sm:hidden">Clear</span>
                 </button>
               </div>
@@ -378,32 +548,55 @@ const App = () => {
                     <span className="text-sm text-green-600 animate-pulse">Loading...</span>
                   )}
                 </div>
-                
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={handleRefreshProducts}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800"
-                    title="Refresh from Google Sheets"
-                  >
-                    <FaSync className="h-4 w-4" />
-                    <span className="text-sm">Refresh</span>
-                  </button>
-                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    {products.length} items
-                  </span>
-                </div>
+                <div className="flex flex-col items-end gap-1">
+  <div className="flex items-center space-x-2">
+    <button
+      onClick={handleRefreshProducts}
+      disabled={loadingProducts}
+      className={`flex items-center space-x-2 px-3 py-1 rounded-lg ${loadingProducts ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+      title="Refresh from Google Sheets"
+    >
+      <FaSync className={`h-4 w-4 ${loadingProducts ? 'animate-spin' : ''}`} />
+      <span className="text-sm">Force Refresh</span> {/* Changed text */}
+    </button>
+    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+      {products.length} items
+    </span>
+  </div>
+  <div className="flex gap-2">
+    <button
+      onClick={handleClearAllCaches}
+      className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded"
+      title="Clear all caches"
+    >
+      Clear Cache
+    </button>
+    <button
+      onClick={() => {
+        // Hard refresh the page
+        window.location.reload(true);
+      }}
+      className="text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded"
+      title="Hard refresh page"
+    >
+      Reload Page
+    </button>
+  </div>
+</div>
+            
               </div>
 
               {loadingProducts ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
                   <p className="mt-2 text-gray-600">Loading products from Google Sheets...</p>
+                  <p className="mt-1 text-xs text-gray-500">Cache busting enabled: {productsCacheKey.toString().slice(-6)}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {products.map((product) => (
                     <button
-                      key={product.id}
+                      key={`${product.id}-${product.price}-${productsCacheKey}`}
                       onClick={() => handleAddProduct(product)}
                       className="group bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-left hover:border-green-300 hover:shadow-lg transition-all duration-200"
                     >
@@ -428,8 +621,14 @@ const App = () => {
               {/* Show message if no products loaded */}
               {!loadingProducts && products.length === 0 && (
                 <div className="text-center py-6">
-                  <p className="text-gray-500 mb-3">No products found in Google Sheets</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-gray-500 mb-3">No products found</p>
+                  <button
+                    onClick={handleRefreshProducts}
+                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    Click to refresh
+                  </button>
+                  <p className="text-xs text-gray-400 mt-2">
                     Make sure your Google Sheet has columns: ID, Name, Price, Category
                   </p>
                 </div>
