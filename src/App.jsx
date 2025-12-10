@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './App.css';
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import Papa from 'papaparse';
 import {
   FaShoppingCart,
   FaDownload,
@@ -18,28 +21,15 @@ import {
   FaPhone,
   FaMapMarkerAlt,
   FaStore,
-  FaTrash
+  FaTrash,
+  FaSync  // ADD THIS IMPORT
 } from 'react-icons/fa';
 
 const App = () => {
-  // Static fruit products
-  const products = [
-    { id: 1, name: 'Apple', price: 150, category: 'Fruits' },
-    { id: 2, name: 'Banana', price: 80, category: 'Fruits' },
-    { id: 3, name: 'Orange', price: 120, category: 'Fruits' },
-    { id: 4, name: 'Mango', price: 250, category: 'Fruits' },
-    { id: 5, name: 'Pineapple', price: 300, category: 'Fruits' },
-    { id: 6, name: 'Watermelon', price: 450, category: 'Fruits' },
-    { id: 7, name: 'Grapes', price: 280, category: 'Fruits' },
-    { id: 8, name: 'Strawberry', price: 350, category: 'Fruits' },
-    { id: 9, name: 'Kiwi', price: 180, category: 'Fruits' },
-    { id: 10, name: 'Pomegranate', price: 220, category: 'Fruits' },
-  ];
 
-  // Generate unique invoice number
-const generateUniqueInvoiceNumber = () => {
-  return 'INV-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000);
-};
+  const generateUniqueInvoiceNumber = () => {
+    return 'INV-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000);
+  };
 
   // Load from localStorage or use default
   const loadInitialInvoice = () => {
@@ -68,6 +58,61 @@ const generateUniqueInvoiceNumber = () => {
   };
 
   const [invoice, setInvoice] = useState(loadInitialInvoice);
+  const [products, setProducts] = useState([]); // Dynamic products from Google Sheets
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
+
+  const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQjOvqKnTVpO0wrrFqpihWTrYVLPCa_g44vl9S9Urh8-RHukPRjhBd_sz6ZqSW73xPXJQPwG5WpsL0W/pub?output=csv';
+
+  // Function to fetch products from Google Sheets
+  const fetchProductsFromGoogleSheets = async () => {
+    try {
+      setLoadingProducts(true);
+      const response = await fetch(GOOGLE_SHEETS_URL);
+      const csvText = await response.text();
+      
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          // Transform CSV data to match our product structure
+          const formattedProducts = results.data.map((row, index) => ({
+            id: parseInt(row.ID) || index + 1,
+            name: row.Name || row.name || '',
+            price: parseFloat(row.Price || row.price || 0),
+            category: row.Category || row.category || 'General'
+          }));
+          setProducts(formattedProducts);
+          setLoadingProducts(false);
+          toast.success('Products loaded from Google Sheets!');
+        },
+        error: (error) => {
+          console.error('Error parsing CSV:', error);
+          setLoadingProducts(false);
+          toast.error('Failed to load products');
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setLoadingProducts(false);
+      toast.error('Network error loading products');
+    }
+  };
+
+  // Load products on component mount
+  useEffect(() => {
+    fetchProductsFromGoogleSheets();
+    
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(fetchProductsFromGoogleSheets, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Add a refresh button function
+  const handleRefreshProducts = () => {
+    fetchProductsFromGoogleSheets();
+    toast.info('Refreshing products from Google Sheets...');
+  };
 
   // Save to localStorage whenever invoice changes
   useEffect(() => {
@@ -97,12 +142,19 @@ const generateUniqueInvoiceNumber = () => {
 
   // Handle product selection
   const handleAddProduct = (product) => {
-    const existingItemIndex = invoice.items.findIndex(item => item.productId === product.id);
+    const existingItemIndex = invoice.items.findIndex(
+      item => item.productId === product.id
+    );
 
     if (existingItemIndex >= 0) {
       const updatedItems = [...invoice.items];
       updatedItems[existingItemIndex].quantity += 1;
       setInvoice({ ...invoice, items: updatedItems });
+
+      toast.success(`${product.name} quantity updated`, {
+        position: "top-right",
+        autoClose: 1200,
+      });
     } else {
       const newItem = {
         id: Date.now(),
@@ -112,6 +164,11 @@ const generateUniqueInvoiceNumber = () => {
         price: product.price,
       };
       setInvoice({ ...invoice, items: [...invoice.items, newItem] });
+
+      toast.success(`${product.name} added to invoice`, {
+        position: "top-right",
+        autoClose: 1200,
+      });
     }
   };
 
@@ -269,7 +326,7 @@ const generateUniqueInvoiceNumber = () => {
                   <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-700 bg-clip-text text-transparent">
                     FreshFruits Billing
                   </h1>
-                  <p className="text-xs sm:text-sm md:text-base text-gray-600">Invoice Generator</p>
+                  <p className="text-xs sm:text-sm md:text-base text-gray-600">Invoice Generator (Live from Google Sheets)</p>
                 </div>
               </div>
 
@@ -300,8 +357,6 @@ const generateUniqueInvoiceNumber = () => {
                   <span className="hidden sm:inline">Clear All</span>
                   <span className="sm:hidden">Clear</span>
                 </button>
-
-                
               </div>
             </div>
           </div>
@@ -312,40 +367,73 @@ const generateUniqueInvoiceNumber = () => {
           {/* Left Column - Products & Customer Info */}
           <div className="xl:col-span-1 space-y-4 sm:space-y-6 md:space-y-8 print:hidden">
             {/* Products Grid */}
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center space-x-2">
-                  <FaStore className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
-                  <span>Products</span>
-                </h2>
-                <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full inline-block w-fit">
-                  {products.length} items
-                </span>
+            <div className="bg-white rounded-2xl shadow-xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center space-x-2">
+                    <FaStore className="h-5 w-5 text-green-600" />
+                    <span>Products</span>
+                  </h2>
+                  {loadingProducts && (
+                    <span className="text-sm text-green-600 animate-pulse">Loading...</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={handleRefreshProducts}
+                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800"
+                    title="Refresh from Google Sheets"
+                  >
+                    <FaSync className="h-4 w-4" />
+                    <span className="text-sm">Refresh</span>
+                  </button>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                    {products.length} items
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {products.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => handleAddProduct(product)}
-                    className="group bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg sm:rounded-xl p-3 sm:p-4 text-left hover:border-green-300 hover:shadow-lg transition-all duration-200"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-semibold text-sm sm:text-base text-gray-800 group-hover:text-green-700">
-                        {product.name}
-                      </span>
-                      <span className="text-xs sm:text-sm font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
-                        ₹{product.price}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2 sm:mb-3">{product.category}</p>
-                    <div className="flex items-center text-green-600 text-xs sm:text-sm">
-                      <FaPlus className="h-3 w-3 mr-1" />
-                      <span>Add to invoice</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {loadingProducts ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-600">Loading products from Google Sheets...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {products.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleAddProduct(product)}
+                      className="group bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-left hover:border-green-300 hover:shadow-lg transition-all duration-200"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-semibold text-gray-800 group-hover:text-green-700">
+                          {product.name}
+                        </span>
+                        <span className="text-sm font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
+                          ₹{product.price}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">{product.category}</p>
+                      <div className="flex items-center text-green-600 text-sm">
+                        <FaPlus className="h-3 w-3 mr-1" />
+                        <span>Add to invoice</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* Show message if no products loaded */}
+              {!loadingProducts && products.length === 0 && (
+                <div className="text-center py-6">
+                  <p className="text-gray-500 mb-3">No products found in Google Sheets</p>
+                  <p className="text-xs text-gray-400">
+                    Make sure your Google Sheet has columns: ID, Name, Price, Category
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Customer Information */}
@@ -639,6 +727,7 @@ const generateUniqueInvoiceNumber = () => {
           </div>
         </div>
       </div>
+      <ToastContainer />
     </div>
   );
 };
