@@ -65,20 +65,20 @@ const App = () => {
   const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQjOvqKnTVpO0wrrFqpihWTrYVLPCa_g44vl9S9Urh8-RHukPRjhBd_sz6ZqSW73xPXJQPwG5WpsL0W/pub?output=csv';
 
   // Function to fetch products from Google Sheets with cache busting
- const fetchProductsFromGoogleSheets = useCallback(async (forceRefresh = false) => {
-  try {
-    setLoadingProducts(true);
-    
-    console.log('=== DEBUG: Starting fetch ===');
-    console.log('Force refresh:', forceRefresh);
-    console.log('Cache key:', productsCacheKey);
-    
-    // Clear old caches if forcing refresh
-    if (forceRefresh) {
-      localStorage.removeItem('freshfruits_products_cache');
-      sessionStorage.removeItem('freshfruits_products');
-      console.log('=== DEBUG: Cleared all caches ===');
-    }
+  const fetchProductsFromGoogleSheets = useCallback(async (forceRefresh = false) => {
+    try {
+      setLoadingProducts(true);
+
+      console.log('=== DEBUG: Starting fetch ===');
+      console.log('Force refresh:', forceRefresh);
+      console.log('Cache key:', productsCacheKey);
+
+      // Clear old caches if forcing refresh
+      if (forceRefresh) {
+        localStorage.removeItem('freshfruits_products_cache');
+        sessionStorage.removeItem('freshfruits_products');
+        console.log('=== DEBUG: Cleared all caches ===');
+      }
       // Check session storage first (short-term cache, 2 minutes)
       const sessionCached = sessionStorage.getItem('freshfruits_products');
       if (sessionCached && !forceRefresh) {
@@ -90,7 +90,7 @@ const App = () => {
           return;
         }
       }
-      
+
       // Check localStorage cache (longer-term, 10 minutes)
       const localCached = localStorage.getItem('freshfruits_products_cache');
       if (localCached && !forceRefresh) {
@@ -98,93 +98,93 @@ const App = () => {
         if (cacheData.timestamp && cacheData.expiresAt > Date.now()) {
           setProducts(cacheData.products);
           setLoadingProducts(false);
-          
+
           // Also update session cache
           sessionStorage.setItem('freshfruits_products', JSON.stringify(cacheData));
           return;
         }
       }
-      
-// Fetch fresh data with cache busting
-const timestamp = Date.now();
-setProductsCacheKey(timestamp);
 
-// Use cache busting parameter with &
-const url = `${GOOGLE_SHEETS_URL}&_=${timestamp}`;
-console.log('=== DEBUG: Fetching URL:', url);
+      // Fetch fresh data with cache busting
+      const timestamp = Date.now();
+      setProductsCacheKey(timestamp);
 
-const response = await fetch(url, {
-  cache: 'no-cache'  // Simpler option
-});
+      // Use cache busting parameter with &
+      const url = `${GOOGLE_SHEETS_URL}&_=${timestamp}`;
+      console.log('=== DEBUG: Fetching URL:', url);
+
+      const response = await fetch(url, {
+        cache: 'no-cache'  // Simpler option
+      });
       const csvText = await response.text();
-      
-      Papa.parse(csvText, {
-  header: true,
-  skipEmptyLines: true,
-  complete: (results) => {
-    // Log raw data for debugging
-    console.log('Raw CSV results:', results.data);
-    
-    // Filter out empty or invalid rows - handle different header formats
-    const formattedProducts = results.data
-      .filter(row => {
-        // Check for different possible header names
-        const name = row.Name || row.name || row['Name'] || '';
-        const price = row.Price || row.price || row['Price'] || 0;
-        return name && name.trim() !== '' && price && !isNaN(parseFloat(price));
-      })
-      .map((row, index) => {
-        // Handle different header name variations
-        const name = row.Name || row.name || row['Name'] || '';
-        const price = row.Price || row.price || row['Price'] || 0;
-        const category = row.Category || row.category || row['Category'] || 'General';
-        
-        return {
-          id: parseInt(row.ID) || index + 1,
-          name: name.toString().trim(),
-          price: parseFloat(price) || 0,
-          category: category.toString().trim()
-        };
-      })
-      .filter(product => product.name && !isNaN(product.price) && product.price > 0);
-    
-    // Debug log
-    console.log('Formatted products:', formattedProducts);
-    
-    // Save to caches with expiration
-// Save to caches with SHORT expiration (for testing)
-const cacheData = {
-  products: formattedProducts,
-  timestamp: Date.now(),
-  expiresAt: Date.now() + (1 * 60 * 1000) // 1 minute for localStorage
-};
 
-const sessionCacheData = {
-  products: formattedProducts,
-  timestamp: Date.now(),
-  expiresAt: Date.now() + (30 * 1000) // 30 seconds for sessionStorage
-};
-    
-    localStorage.setItem('freshfruits_products_cache', JSON.stringify(cacheData));
-    sessionStorage.setItem('freshfruits_products', JSON.stringify(sessionCacheData));
-    
-    setProducts(formattedProducts);
-    setLoadingProducts(false);
-    
-    if (forceRefresh) {
-      toast.success(`Refreshed! Loaded ${formattedProducts.length} products`);
-    } else {
-      toast.success(`Loaded ${formattedProducts.length} products from Google Sheets`);
-    }
-  
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          // Log raw data for debugging
+          console.log('Raw CSV results:', results.data);
+
+          // Filter out empty or invalid rows - handle different header formats
+          const formattedProducts = results.data
+            .filter(row => {
+              // Check for different possible header names
+              const name = row.Name || row.name || row['Name'] || '';
+              const price = row.Price || row.price || row['Price'] || 0;
+              return name && name.trim() !== '' && price && !isNaN(parseFloat(price));
+            })
+            .map((row, index) => {
+              // Handle different header name variations
+              const name = row.Name || row.name || row['Name'] || '';
+              const price = row.Price || row.price || row['Price'] || 0;
+              const category = row.Category || row.category || row['Category'] || 'General';
+
+              return {
+                id: parseInt(row.ID) || index + 1,
+                name: name.toString().trim(),
+                price: parseFloat(price) || 0,
+                category: category.toString().trim()
+              };
+            })
+            .filter(product => product.name && !isNaN(product.price) && product.price > 0);
+
+          // Debug log
+          console.log('Formatted products:', formattedProducts);
+
+          // Save to caches with expiration
+          // Save to caches with SHORT expiration (for testing)
+          const cacheData = {
+            products: formattedProducts,
+            timestamp: Date.now(),
+            expiresAt: Date.now() + (1 * 60 * 1000) // 1 minute for localStorage
+          };
+
+          const sessionCacheData = {
+            products: formattedProducts,
+            timestamp: Date.now(),
+            expiresAt: Date.now() + (30 * 1000) // 30 seconds for sessionStorage
+          };
+
+          localStorage.setItem('freshfruits_products_cache', JSON.stringify(cacheData));
+          sessionStorage.setItem('freshfruits_products', JSON.stringify(sessionCacheData));
+
+          setProducts(formattedProducts);
+          setLoadingProducts(false);
+
+          if (forceRefresh) {
+            toast.success(`Refreshed! Loaded ${formattedProducts.length} products`);
+          } else {
+            toast.success(`Loaded ${formattedProducts.length} products from Google Sheets`);
+          }
+
         },
         error: (error) => {
           console.error('Error parsing CSV:', error);
           setLoadingProducts(false);
-          
+
           // Try to use cached data as fallback
-          const cached = localStorage.getItem('freshfruits_products_cache') || 
-                        sessionStorage.getItem('freshfruits_products');
+          const cached = localStorage.getItem('freshfruits_products_cache') ||
+            sessionStorage.getItem('freshfruits_products');
           if (cached) {
             try {
               const cacheData = JSON.parse(cached);
@@ -203,10 +203,10 @@ const sessionCacheData = {
     } catch (error) {
       console.error('Error fetching products:', error);
       setLoadingProducts(false);
-      
+
       // Try to use cached data as fallback
-      const cached = localStorage.getItem('freshfruits_products_cache') || 
-                    sessionStorage.getItem('freshfruits_products');
+      const cached = localStorage.getItem('freshfruits_products_cache') ||
+        sessionStorage.getItem('freshfruits_products');
       if (cached) {
         try {
           const cacheData = JSON.parse(cached);
@@ -230,55 +230,55 @@ const sessionCacheData = {
 
   // Add a refresh button function with debouncing
   const handleRefreshProducts = useCallback(() => {
-  if (loadingProducts) {
-    toast.info('Already refreshing...');
-    return;
-  }
-  
-  toast.info('Force refreshing from Google Sheets...', {
-    autoClose: 1500,
-    position: "top-right"
-  });
-  
-  // Force clear all caches first
-  localStorage.removeItem('freshfruits_products_cache');
-  sessionStorage.removeItem('freshfruits_products');
-  
-  // Update cache key to force re-render
-  const newCacheKey = Date.now();
-  setProductsCacheKey(newCacheKey);
-  
-  // Clear products state briefly to show loading
-  setProducts([]);
-  
-  // Force refresh with new cache busting
-  fetchProductsFromGoogleSheets(true);
-}, [fetchProductsFromGoogleSheets, loadingProducts]);
-// Clear all caches completely with browser cache clearing
-const handleClearAllCaches = () => {
-  // Clear all caches
-  localStorage.removeItem('freshfruits_products_cache');
-  sessionStorage.removeItem('freshfruits_products');
-  
-  // Clear fetch cache by modifying URL
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(7);
-  
-  // Force update cache key
-  setProductsCacheKey(timestamp);
-  
-  // Clear products state
-  setProducts([]);
-  
-  // Show immediate feedback
-  toast.info('Clearing browser cache...', { autoClose: 1000 });
-  
-  // Force refresh with new cache busting parameters
-  setTimeout(() => {
+    if (loadingProducts) {
+      toast.info('Already refreshing...');
+      return;
+    }
+
+    toast.info('Force refreshing from Google Sheets...', {
+      autoClose: 1500,
+      position: "top-right"
+    });
+
+    // Force clear all caches first
+    localStorage.removeItem('freshfruits_products_cache');
+    sessionStorage.removeItem('freshfruits_products');
+
+    // Update cache key to force re-render
+    const newCacheKey = Date.now();
+    setProductsCacheKey(newCacheKey);
+
+    // Clear products state briefly to show loading
+    setProducts([]);
+
+    // Force refresh with new cache busting
     fetchProductsFromGoogleSheets(true);
-    toast.success('Cache cleared! Refreshing...');
-  }, 100);
-};
+  }, [fetchProductsFromGoogleSheets, loadingProducts]);
+  // Clear all caches completely with browser cache clearing
+  const handleClearAllCaches = () => {
+    // Clear all caches
+    localStorage.removeItem('freshfruits_products_cache');
+    sessionStorage.removeItem('freshfruits_products');
+
+    // Clear fetch cache by modifying URL
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(7);
+
+    // Force update cache key
+    setProductsCacheKey(timestamp);
+
+    // Clear products state
+    setProducts([]);
+
+    // Show immediate feedback
+    toast.info('Clearing browser cache...', { autoClose: 1000 });
+
+    // Force refresh with new cache busting parameters
+    setTimeout(() => {
+      fetchProductsFromGoogleSheets(true);
+      toast.success('Cache cleared! Refreshing...');
+    }, 100);
+  };
 
   // Save to localStorage whenever invoice changes
   useEffect(() => {
@@ -549,41 +549,32 @@ const handleClearAllCaches = () => {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-1">
-  <div className="flex items-center space-x-2">
-    <button
-      onClick={handleRefreshProducts}
-      disabled={loadingProducts}
-      className={`flex items-center space-x-2 px-3 py-1 rounded-lg ${loadingProducts ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-      title="Refresh from Google Sheets"
-    >
-      <FaSync className={`h-4 w-4 ${loadingProducts ? 'animate-spin' : ''}`} />
-      <span className="text-sm">Force Refresh</span> {/* Changed text */}
-    </button>
-    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-      {products.length} items
-    </span>
-  </div>
-  <div className="flex gap-2">
-    <button
-      onClick={handleClearAllCaches}
-      className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded"
-      title="Clear all caches"
-    >
-      Clear Cache
-    </button>
-    <button
-      onClick={() => {
-        // Hard refresh the page
-        window.location.reload(true);
-      }}
-      className="text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded"
-      title="Hard refresh page"
-    >
-      Reload Page
-    </button>
-  </div>
-</div>
-            
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleRefreshProducts}
+                      disabled={loadingProducts}
+                      className={`flex items-center space-x-2 px-3 py-1 rounded-lg ${loadingProducts ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                      title="Refresh from Google Sheets"
+                    >
+                      <FaSync className={`h-4 w-4 ${loadingProducts ? 'animate-spin' : ''}`} />
+                      <span className="text-sm">Refresh</span> 
+                    </button>
+                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                      {products.length} items
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleClearAllCaches}
+                      className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded"
+                      title="Clear all caches"
+                    >
+                      Clear Cache
+                    </button>
+
+                  </div>
+                </div>
+
               </div>
 
               {loadingProducts ? (
@@ -617,7 +608,7 @@ const handleClearAllCaches = () => {
                   ))}
                 </div>
               )}
-              
+
               {/* Show message if no products loaded */}
               {!loadingProducts && products.length === 0 && (
                 <div className="text-center py-6">
@@ -790,15 +781,15 @@ const handleClearAllCaches = () => {
                           </td>
                           <td className="px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-1 sm:space-x-2">
-                              <button 
-                                onClick={() => updateItemQuantity(item.id, item.quantity - 1)} 
+                              <button
+                                onClick={() => updateItemQuantity(item.id, item.quantity - 1)}
                                 className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center bg-gray-100 rounded hover:bg-gray-200 text-xs sm:text-sm"
                               >
                                 -
                               </button>
                               <span className="w-8 sm:w-12 text-center font-medium text-xs sm:text-sm">{item.quantity}</span>
-                              <button 
-                                onClick={() => updateItemQuantity(item.id, item.quantity + 1)} 
+                              <button
+                                onClick={() => updateItemQuantity(item.id, item.quantity + 1)}
                                 className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center bg-green-100 text-green-700 rounded hover:bg-green-200 text-xs sm:text-sm"
                               >
                                 +
@@ -809,8 +800,8 @@ const handleClearAllCaches = () => {
                             <div className="text-xs sm:text-sm font-bold text-gray-900">₹{(item.price * item.quantity).toLocaleString('en-IN')}</div>
                           </td>
                           <td className="px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 print:hidden">
-                            <button 
-                              onClick={() => removeItem(item.id)} 
+                            <button
+                              onClick={() => removeItem(item.id)}
                               className="text-red-600 hover:text-red-800 p-1 sm:p-2 hover:bg-red-50 rounded"
                             >
                               <FaTrashAlt className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -833,20 +824,20 @@ const handleClearAllCaches = () => {
                 <div className="lg:col-span-2 space-y-3 sm:space-y-4">
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Notes</label>
-                    <textarea 
-                      value={invoice.notes} 
-                      onChange={(e) => handleInputChange('notes', e.target.value)} 
-                      rows="3" 
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent print:border-0 text-sm sm:text-base" 
+                    <textarea
+                      value={invoice.notes}
+                      onChange={(e) => handleInputChange('notes', e.target.value)}
+                      rows="3"
+                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent print:border-0 text-sm sm:text-base"
                     />
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Terms & Conditions</label>
-                    <textarea 
-                      value={invoice.terms} 
-                      onChange={(e) => handleInputChange('terms', e.target.value)} 
-                      rows="2" 
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent print:border-0 text-sm sm:text-base" 
+                    <textarea
+                      value={invoice.terms}
+                      onChange={(e) => handleInputChange('terms', e.target.value)}
+                      rows="2"
+                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent print:border-0 text-sm sm:text-base"
                     />
                   </div>
                 </div>
@@ -866,14 +857,14 @@ const handleClearAllCaches = () => {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 flex items-center">
-                        <FaPercent className="h-3 w-3 sm:h-4 sm:w-4 mr-1" /> 
+                        <FaPercent className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                         Tax ({invoice.taxRate}%)
                       </span>
                       <span className="text-xs sm:text-sm font-medium">₹{parseFloat(calculations.tax).toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 flex items-center">
-                        <FaPercent className="h-3 w-3 sm:h-4 sm:w-4 mr-1" /> 
+                        <FaPercent className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                         Discount ({invoice.discount}%)
                       </span>
                       <span className="text-xs sm:text-sm font-medium text-red-600">-₹{parseFloat(calculations.discount).toLocaleString('en-IN')}</span>
@@ -889,25 +880,25 @@ const handleClearAllCaches = () => {
                   <div className="mt-3 sm:mt-4 md:mt-6 space-y-2 sm:space-y-3 print:hidden">
                     <div className="flex items-center space-x-2">
                       <label className="text-xs sm:text-sm text-gray-600">Tax:</label>
-                      <input 
-                        type="number" 
-                        value={invoice.taxRate} 
-                        onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value) || 0)} 
-                        className="w-16 sm:w-20 px-2 py-1 border border-gray-300 rounded text-center text-xs sm:text-sm" 
-                        min="0" 
-                        step="0.1" 
+                      <input
+                        type="number"
+                        value={invoice.taxRate}
+                        onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value) || 0)}
+                        className="w-16 sm:w-20 px-2 py-1 border border-gray-300 rounded text-center text-xs sm:text-sm"
+                        min="0"
+                        step="0.1"
                       />
                       <span className="text-xs sm:text-sm text-gray-600">%</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <label className="text-xs sm:text-sm text-gray-600">Discount:</label>
-                      <input 
-                        type="number" 
-                        value={invoice.discount} 
-                        onChange={(e) => handleInputChange('discount', parseFloat(e.target.value) || 0)} 
-                        className="w-16 sm:w-20 px-2 py-1 border border-gray-300 rounded text-center text-xs sm:text-sm" 
-                        min="0" 
-                        step="0.1" 
+                      <input
+                        type="number"
+                        value={invoice.discount}
+                        onChange={(e) => handleInputChange('discount', parseFloat(e.target.value) || 0)}
+                        className="w-16 sm:w-20 px-2 py-1 border border-gray-300 rounded text-center text-xs sm:text-sm"
+                        min="0"
+                        step="0.1"
                       />
                       <span className="text-xs sm:text-sm text-gray-600">%</span>
                     </div>
