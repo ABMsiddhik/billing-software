@@ -489,14 +489,12 @@ const App = () => {
                 <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-2 sm:p-3 rounded-lg sm:rounded-xl shadow-lg">
                   <FaShoppingCart className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                 </div>
-                <div>
+                <div className='py-3'>
                   <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-700 bg-clip-text text-transparent">
                     FreshFruits Billing
                   </h1>
                   <p className="text-xs sm:text-sm md:text-base text-gray-600">Invoice Generator (Live from Google Sheets)</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Products Cache Key: <span className="font-mono">{productsCacheKey.toString().slice(-6)}</span>
-                  </p>
+                  
                 </div>
               </div>
 
